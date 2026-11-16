@@ -1,0 +1,7 @@
+{
+  "server": "wcraft-play.duckdns.org:25565",
+  "horizon_version": "nightly-2026-11-13-9f42064",
+  "instance": "WCraft",
+  "endpoint": "https://api.github.com/repos/WahhaWood/wcraft-endpoint/contents/endpoint.json",
+  "auth": "https://wcraft-play.duckdns.org"
+}

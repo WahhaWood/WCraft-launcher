@@ -1,0 +1,209 @@
+:root {
+  --page: #0a1020;
+  --panel: #0f1628;
+  --ink: #eef2fa;
+  --ink-soft: #b4bdd0;
+  --muted: #7c87a0;
+  --rule: rgba(255, 255, 255, 0.075);
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-hi: rgba(255, 255, 255, 0.075);
+  --stroke: rgba(255, 255, 255, 0.1);
+  --accent: #f4b63f;
+  --accent-ink: #2b1d02;
+  --accent-soft: color-mix(in oklab, var(--accent) 70%, white);
+  --live: #5ee39a;
+  --warn: #f2c46b;
+  --danger: #ff8a8a;
+  --font: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --display: 'Bricolage Grotesque Variable', 'Geist Variable', ui-sans-serif, sans-serif;
+  --mono: ui-monospace, 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
+  --pixel: 'Pixelify Sans', var(--font);
+  /* Nicks mix letters and digits: a zero with a dot, and l, I, 1 told apart. */
+  --nick: 'JetBrains Mono Variable', var(--mono);
+  --radius: 8px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font: 400 14px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 0;
+  background: none;
+  padding: 0;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.22);
+}
+
+/* Shared controls */
+.btn {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  background: var(--surface-hi);
+  border: 1px solid var(--stroke);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+.btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+.btn.ghost {
+  background: none;
+  border-color: transparent;
+  color: var(--ink-soft);
+}
+.btn.ghost:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--surface-hi);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.btn.primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--accent) 88%, white);
+}
+.btn.danger:hover:not(:disabled) {
+  color: var(--danger);
+}
+.btn:disabled {
+  opacity: 0.5;
+}
+
+.segment {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 99px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+}
+.segment button {
+  height: 28px;
+  padding: 0 14px;
+  border-radius: 99px;
+  color: var(--muted);
+  font-weight: 500;
+  transition: color 0.12s, background 0.12s;
+}
+.segment button:hover {
+  color: var(--ink);
+}
+.segment button.on {
+  background: var(--ink);
+  color: var(--page);
+}
+
+.field {
+  height: 34px;
+  width: 300px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--stroke);
+  font-family: var(--mono);
+  font-size: 13px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.field::placeholder {
+  color: var(--muted);
+}
+.field:focus {
+  outline: none;
+  border-color: var(--accent-soft);
+}
+
+.page-title {
+  font: 600 34px/1.1 var(--font);
+  letter-spacing: -0.03em;
+}
+.page-sub {
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  animation: spin 0.8s linear infinite;
+  /* Own compositing layer: a parent's hover repaint must not stall the animation (WebKitGTK). */
+  will-change: transform;
+  flex: none;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
