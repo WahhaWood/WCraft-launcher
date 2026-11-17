@@ -255,7 +255,8 @@ fn command(args: &[&str]) -> Result<Command, String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        // CREATE_NO_WINDOW: no console window for the CLI or anything it starts (they share its hidden console).
+        // CREATE_NO_WINDOW: no console window for a console-subsystem CLI. The CLI is a GUI program, so it has no
+        // console at all and hides the consoles of what it runs itself (`console::in_terminal` in horizon-cli).
         // CREATE_NEW_PROCESS_GROUP: the group ignores Ctrl+C, so a stray console event cannot kill a step
         // with 0xc000013a (STATUS_CONTROL_C_EXIT), as happened to `prepare`.
         c.creation_flags(0x0800_0000 | 0x0000_0200);

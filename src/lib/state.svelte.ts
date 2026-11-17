@@ -10,7 +10,7 @@ export const app = $state({
   step: '',
   lastLine: '',
   /** How far setup is in bytes, and the seconds it should still take (null until the pace is known). */
-  progress: null as null | { done: number; total: number; eta: number | null },
+  progress: null as null | { done: number; total: number; eta: number | null; speed: number | null },
   log: [] as string[],
   error: '',
   playing: false,
@@ -73,7 +73,11 @@ function onProgress(p: { done: number; total: number } | null) {
   const first = samples[0]
   const secs = (t - first.t) / 1000
   const rate = (p.done - first.done) / secs
-  app.progress = { ...p, eta: secs >= 5 && rate > 0 ? Math.max(0, p.total - p.done) / rate : null }
+  // The speed shown follows the last few seconds, so it reacts when the connection changes.
+  const recent = samples.find((s) => t - s.t <= 5_000) ?? first
+  const recentSecs = (t - recent.t) / 1000
+  const speed = recentSecs >= 1 ? Math.max(0, (p.done - recent.done) / recentSecs) : null
+  app.progress = { ...p, eta: secs >= 5 && rate > 0 ? Math.max(0, p.total - p.done) / rate : null, speed }
 }
 
 async function task(kind: 'setup', step: string, run: () => Promise<void>) {

@@ -11,8 +11,13 @@
   const NICK = /^[a-zA-Z0-9_]{3,16}$/
   const gb = (bytes: number) => (bytes / 1e9).toLocaleString('ru', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + ' ГБ'
 
+  const speed = (bps: number) =>
+    bps >= 1e6
+      ? (bps / 1e6).toLocaleString('ru', { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + ' МБ/с'
+      : Math.round(bps / 1e3) + ' КБ/с'
+
   /** The time setup should still take, rounded the way a person would say it. */
-  function timeLeft(p: { done: number; total: number; eta: number | null }): string {
+  function timeLeft(p: { done: number; total: number; eta: number | null; speed: number | null }): string {
     if (p.done >= p.total * 0.97) return 'Почти готово'
     if (p.eta === null) return 'Оцениваю время…'
     const min = Math.round(p.eta / 60)
@@ -235,7 +240,10 @@
           {#if app.progress}
             {@const p = app.progress}
             <div class="progress"><b style:width="{Math.min(99, (p.done / p.total) * 100)}%"></b></div>
-            <p class="line">{timeLeft(p)} · {gb(Math.min(p.done, p.total))} из {gb(p.total)}</p>
+            <p class="line">
+              {timeLeft(p)} · {gb(Math.min(p.done, p.total))} из {gb(p.total)}{#if p.speed !== null}
+                · {speed(p.speed)}{/if}
+            </p>
           {:else}
             <div class="progress"><i></i></div>
             <p class="line">{app.lastLine || 'Это может занять несколько минут'}</p>
