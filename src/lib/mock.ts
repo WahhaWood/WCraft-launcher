@@ -10,37 +10,14 @@ if (params.has('shot')) new Image().src = '/__slow'
 // `?click` presses the main button, to look at the busy states.
 if (params.has('click')) setTimeout(() => document.querySelector<HTMLElement>('.play')?.click(), 700)
 
-/** A made-up skin: flat colours where the head, body, arms and legs are. */
-function fakeSkin(hair: string, skin: string, shirt: string, legs: string): string {
-  const c = document.createElement('canvas')
-  c.width = c.height = 64
-  const g = c.getContext('2d')!
-  const fill = (color: string, x: number, y: number, w: number, h: number) => {
-    g.fillStyle = color
-    g.fillRect(x, y, w, h)
-  }
-  fill(hair, 0, 0, 32, 16)
-  fill(skin, 8, 8, 8, 8)
-  fill(hair, 8, 8, 8, 2)
-  fill('#222', 10, 12, 1, 1)
-  fill('#222', 13, 12, 1, 1)
-  fill(shirt, 16, 16, 24, 16)
-  fill(shirt, 40, 16, 16, 16)
-  fill(skin, 44, 28, 12, 4)
-  fill(legs, 0, 16, 16, 16)
-  fill(legs, 16, 48, 16, 16)
-  fill(shirt, 32, 48, 16, 16)
-  fill(skin, 36, 60, 12, 4)
-  return c.toDataURL()
-}
-
 // The real default skins the launcher bundles.
 const bundled = import.meta.glob<string>('../../src-tauri/skins/*.png', { eager: true, query: '?url', import: 'default' })
 const SLIM = ['alex', 'efe', 'makena', 'noor']
+const mine = Object.entries(bundled).find(([path]) => path.endsWith('/kai.png'))![1]
 
 const library: Library = {
   active: 'mine',
-  saved: [{ id: 'mine', name: 'Мой скин', model: 'classic', url: fakeSkin('#1d8f95', '#c9a183', '#15151c', '#101016') }],
+  saved: [{ id: 'mine', name: 'Мой скин', model: 'classic', url: mine }],
   defaults: Object.entries(bundled).map(([path, url]) => {
     const id = path.split('/').pop()!.replace('.png', '')
     return { id: `default:${id}`, name: id[0].toUpperCase() + id.slice(1), model: SLIM.includes(id) ? 'slim' : 'classic', url }
