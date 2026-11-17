@@ -59,6 +59,6 @@ Windows с Linux: `scripts/build-windows.sh` (в основном репозит
 ключом WCraft (в `src-tauri/src/update.rs` лежит только публичный ключ), так что форк с чужим
 адресом на игроков WCraft не влияет. Официальные сборки — только из Releases этого репозитория.
 
-Скриншоты для README лежат в `docs/img/`: сняты в мок-режиме (`?shot&page=play|skins|shaders|settings`, `fresh` для экрана
-регистрации) в окне 1180×740, например `firefox --headless --no-remote --profile <пустая папка> --window-size 1180,740 --screenshot out.png URL`.
-Если `npm run tauri dev` уже запущен на :1420, мок поднимай на другом порту: `npx vite --port 1431 --strictPort`.
+Скриншоты для README: `npx vite --port 1431 --strictPort`, затем `scripts/shot.sh play "page=play"` (ещё `skins`, `shaders&shaders`,
+`settings`, `play&fresh`; для шейдеров и скинов ждать 12-20 секунд). Скрипт снимает окно 1180×740 настоящим Firefox на отдельном
+Xvfb с программным WebGL, поэтому 3D-игрок виден и экраны не трогаются. Порт 1431, чтобы не мешать `npm run tauri dev` на :1420.

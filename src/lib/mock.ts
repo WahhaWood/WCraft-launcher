@@ -1,5 +1,6 @@
 // Stand-in for the Rust side when the UI runs in a plain browser (vite dev). Not in release builds.
 import type { Library, Settings, Shader, Skin, Status } from './api'
+import { thumbnail } from './skin'
 
 const handlers = new Map<string, ((p: any) => void)[]>()
 const emit = (event: string, payload: unknown) => handlers.get(event)?.forEach((h) => h(payload))
@@ -52,11 +53,11 @@ if (params.has('defaults')) library.active = 'default:steve'
 const fresh = params.has('fresh')
 const status: Status = {
   cli: fresh ? null : '0.2.58',
-  account: fresh ? null : { name: 'WahhaWD', uuid: '19543b09702d4058817e59cda438362f', offline: true },
+  account: fresh ? null : { name: 'Wahha', uuid: '19543b09702d4058817e59cda438362f', offline: true },
   accounts: fresh
     ? []
     : [
-        { name: 'WahhaWD', uuid: '19543b09702d4058817e59cda438362f', offline: true },
+        { name: 'Wahha', uuid: '19543b09702d4058817e59cda438362f', offline: true },
         { name: 'Dara', uuid: '2', offline: true },
       ],
   owner: true,
@@ -67,7 +68,7 @@ const status: Status = {
   server: 'play.wcraft.dev',
   playing: false,
   version: '0.1.0',
-  logged_in: fresh ? [] : ['WahhaWD'],
+  logged_in: fresh ? [] : ['Wahha'],
 }
 let settings: Settings = { server: '', while_playing: 'minimize', game_args: '', accent: 'violet' }
 
@@ -295,7 +296,7 @@ const commands: Record<string, (args: any) => unknown> = {
   },
   server_status: () => {
     if (params.has('offline')) throw 'Connection refused'
-    return { online: 3, max: 20, version: 'Horizon 26.3', ping_ms: 24, players: ['WahhaWD', 'Steve', 'Alex'] }
+    return { online: 3, max: 20, version: 'Horizon 26.3', ping_ms: 24, players: ['Wahha', 'Steve', 'Alex'] }
   },
   settings_get: () => settings,
   settings_set: (a) => void (settings = a.settings),
@@ -307,9 +308,12 @@ const commands: Record<string, (args: any) => unknown> = {
     library.active = id
     return id
   },
-  skins_catalog: () => ({
+  // The real catalog serves rendered pictures; here the same card renderer draws them.
+  skins_catalog: async () => ({
     pages: 1,
-    items: library.defaults.map((d, i) => ({ id: i.toString(16).padStart(16, '0'), title: d.name, model: d.model, preview: d.url, wearers: 100 })),
+    items: await Promise.all(
+      library.defaults.map(async (d, i) => ({ id: i.toString(16).padStart(16, '0'), title: d.name, model: d.model, preview: await thumbnail(d), wearers: 100 })),
+    ),
   }),
   skins_catalog_install: () => 'mock',
   skins_catalog_png: (a) => library.defaults[parseInt(a.id, 16) % library.defaults.length].url,
@@ -361,9 +365,10 @@ const commands: Record<string, (args: any) => unknown> = {
   account_info: () => [Math.floor(Date.now() / 1000) - 86400 * 9, null],
   modrinth_search: (a) => {
     const base = shaders[0]
+    const icons = [shaders[5], shaders[2], shaders[0], shaders[1], shaders[4]]
     return ['Complementary Reimagined', 'BSL Shaders', 'Rethinking Voxels', 'MakeUp - Ultra Fast', 'Photon']
       .filter((n) => n.toLowerCase().includes(a.query.toLowerCase()))
-      .map((n, i) => ({ ...base, id: n.toLowerCase().replace(/\W+/g, '-'), name: n, summary: 'Шейдер с Modrinth', description: 'Шейдер с Modrinth', icon: null, screenshots: [], categories: ['iris', 'optifine'], downloads: 5e6 / (i + 1), file: null, installed_version: null, enabled: false, local: false, license: 'LicenseRef-Custom' }))
+      .map((n, i) => ({ ...base, id: n.toLowerCase().replace(/\W+/g, '-'), name: n, summary: 'Шейдер с Modrinth', description: 'Шейдер с Modrinth', icon: icons[i].icon, screenshots: [], categories: ['iris', 'optifine'], downloads: 5e6 / (i + 1), file: null, installed_version: null, enabled: false, local: false, license: 'LicenseRef-Custom' }))
   },
   resources_list: () => [
     { ...shaders[0], id: 'Faithful.zip', name: 'Faithful 32x', summary: 'Ресурспак', description: '', authors: [], icon: null, screenshots: [], categories: [], local: true, file: 'Faithful.zip', installed_version: null, enabled: true },
@@ -372,7 +377,7 @@ const commands: Record<string, (args: any) => unknown> = {
   resources_remove: () => {},
   resources_add: () => {},
   resources_open_dir: () => {},
-  modrinth_gallery: () => [],
+  modrinth_gallery: () => shaders[5].screenshots,
   modrinth_install: () => new Promise((r) => setTimeout(r, 800)),
   open_link: () => {},
   open_data_dir: () => {},
