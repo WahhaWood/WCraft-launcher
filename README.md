@@ -16,7 +16,7 @@ npx tauri build --bundles appimage > build.log 2>&1; tail -n 40 build.log
 ```
 
 Sidecar `src-tauri/binaries/horizon-launcher-<target-triple>[.exe]` не хранится в git: собрать из
-подмодуля (`cd ../horizon-cli && cargo build --release -p horizon-launcher`) и скопировать
+подмодуля (`cd ../WCraft/horizon-cli && cargo build --release -p horizon-launcher`) и скопировать
 с суффиксом триплета.
 
 `target/` в debug занимает несколько гигабайт; при нехватке места собирайте в tmpfs:
