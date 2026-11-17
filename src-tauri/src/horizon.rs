@@ -255,7 +255,10 @@ fn command(args: &[&str]) -> Result<Command, String> {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        c.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        // CREATE_NO_WINDOW: no console window for the CLI or anything it starts (they share its hidden console).
+        // CREATE_NEW_PROCESS_GROUP: the group ignores Ctrl+C, so a stray console event cannot kill a step
+        // with 0xc000013a (STATUS_CONTROL_C_EXIT), as happened to `prepare`.
+        c.creation_flags(0x0800_0000 | 0x0000_0200);
     }
     Ok(c)
 }
@@ -393,7 +396,12 @@ fn game_home() -> PathBuf {
 /// The prepared resources of a version (`…/horizon-client/26.3`), once `prepare` made them.
 pub fn prepared_dir(tag: &str) -> Option<PathBuf> {
     let root = home().join("versions").join(tag).join(".local/horizon-client");
-    std::fs::read_dir(root).ok()?.flatten().map(|e| e.path()).find(|p| p.join("assets").is_dir())
+    // `horizon-prepare.json` is what a finished prepare leaves; `assets` appears halfway, so a crashed run has it too.
+    std::fs::read_dir(root)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .find(|p| p.join("assets").is_dir() && p.join("horizon-prepare.json").is_file())
 }
 
 pub fn offline_uuid(name: &str) -> String {
