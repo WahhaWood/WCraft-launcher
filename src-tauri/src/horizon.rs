@@ -624,6 +624,16 @@ pub fn setup(slot: &Slot, emit: &Emit) -> Result<(), String> {
         bootstrap::install(emit)?;
     }
     check_cancel()?;
+    // First install only: with a version already there, `install` also reuses its prepared resources.
+    if let Some(base) = pack.base.as_ref().filter(|_| !is_installed(tag) && installed_versions().is_empty()) {
+        step("Скачиваю Horizon");
+        match install_from_service(base, tag, emit) {
+            Err(e) if e == "Отменено" => return Err(e),
+            Err(e) => emit("log", Value::String(format!("С нашего сервера не скачалось ({e}), беру у Horizon"))),
+            Ok(()) => {}
+        }
+        emit("progress", Value::Null);
+    }
     let installed = is_installed(tag);
     let _watch = (!installed || prepared_dir(tag).is_none()).then(|| watch(tag, emit));
     if !installed {
@@ -669,6 +679,55 @@ pub fn setup(slot: &Slot, emit: &Emit) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Installs Horizon's own build of `tag` from the archive our service keeps (`Pack::base`), as `horizon-launcher install`
+/// does it: the archive's one top folder becomes the version's folder, marked `.installed`. GitHub, where Horizon's
+/// releases are, is slow or closed for some players; the archive's SHA-256 comes from the signed pack.
+fn install_from_service(base: &update::Release, tag: &str, emit: &Emit) -> Result<(), String> {
+    let versions = home().join("versions");
+    let (partial, target) = (versions.join(format!(".{tag}.partial")), versions.join(tag));
+    let _ = std::fs::remove_dir_all(&partial);
+    std::fs::create_dir_all(&partial).map_err(|e| e.to_string())?;
+    let archive = partial.join(&base.name);
+    let progress = |done: u64, total: u64| emit("progress", json!({ "done": done, "total": total }));
+    let result = update::download_client(base, &archive, &progress).and_then(|()| {
+        check_cancel()?;
+        emit("progress", Value::Null);
+        emit("step", Value::String("Распаковываю Horizon".into()));
+        place_version(&archive, &partial.join("unpacked"), &target)
+    });
+    let _ = std::fs::remove_dir_all(&partial);
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(&target);
+    }
+    result
+}
+
+fn place_version(archive: &Path, unpacked: &Path, target: &Path) -> Result<(), String> {
+    let file = std::fs::File::open(archive).map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    zip::ZipArchive::new(file).and_then(|mut z| z.extract(unpacked)).map_err(|e| e.to_string())?;
+    #[cfg(not(windows))]
+    tar::Archive::new(flate2::read::GzDecoder::new(file)).unpack(unpacked).map_err(|e| e.to_string())?;
+    let entries: Vec<_> = std::fs::read_dir(unpacked).map_err(|e| e.to_string())?.flatten().collect();
+    let top = match entries.as_slice() {
+        [only] if only.path().is_dir() => only.path(),
+        _ => unpacked.to_path_buf(),
+    };
+    let client = top.join(if cfg!(windows) { "horizon-client.exe" } else { "horizon-client" });
+    if !client.exists() {
+        return Err("В архиве нет игры".into());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&client, std::fs::Permissions::from_mode(0o755));
+    }
+    let _ = std::fs::remove_dir_all(target);
+    std::fs::rename(&top, target).map_err(|e| e.to_string())?;
+    // The mark the CLI counts a version as installed by, written last.
+    std::fs::write(target.join(".installed"), "").map_err(|e| e.to_string())
 }
 
 /// The pack's game program (its mods compiled in, `scripts/release-pack.sh --client`) as a version on the game files
@@ -936,5 +995,44 @@ mod tests {
         let downloaded = downloads();
         setup(&Mutex::new(None), &emit).unwrap();
         assert_eq!(downloads(), downloaded, "a second setup keeps the client");
+    }
+}
+
+#[cfg(test)]
+mod mirror_tests {
+    use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn archive_becomes_a_version_folder() {
+        let root = std::env::temp_dir().join(format!("wcraft-base-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let top = root.join("src/horizon-linux-x86_64");
+        std::fs::create_dir_all(&top).unwrap();
+        std::fs::write(top.join("horizon-client"), "bin").unwrap();
+        let archive = root.join("a.tar.gz");
+        let gz = flate2::write::GzEncoder::new(std::fs::File::create(&archive).unwrap(), flate2::Compression::fast());
+        let mut tar = tar::Builder::new(gz);
+        tar.append_dir_all("horizon-linux-x86_64", &top).unwrap();
+        tar.into_inner().unwrap().finish().unwrap();
+        std::fs::create_dir_all(root.join("versions")).unwrap();
+        let target = root.join("versions/v1");
+        place_version(&archive, &root.join("unpacked"), &target).unwrap();
+        assert!(target.join("horizon-client").is_file() && target.join(".installed").is_file());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The real archive through `place_version`, then the CLI must count it installed:
+    /// `WCRAFT_HOME=<empty dir> WCRAFT_TEST_BASE=<horizon-linux-x86_64.tar.gz> cargo test -- --ignored mirror_install`
+    #[cfg(not(windows))]
+    #[test]
+    #[ignore]
+    fn mirror_install_is_seen_by_the_cli() {
+        let archive = PathBuf::from(std::env::var_os("WCRAFT_TEST_BASE").expect("WCRAFT_TEST_BASE"));
+        let tag = config::pack().horizon_version;
+        let versions = home().join("versions");
+        std::fs::create_dir_all(&versions).unwrap();
+        place_version(&archive, &versions.join(".x.partial/unpacked"), &versions.join(&tag)).unwrap();
+        assert!(is_installed(&tag));
     }
 }

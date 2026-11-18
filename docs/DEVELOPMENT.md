@@ -35,6 +35,7 @@ Windows с Linux: `scripts/build-windows.sh` (в основном репозит
 |---|---|
 | `src-tauri/wcraft.json` | сборка: адрес сервера, закреплённая версия Horizon, имя instance |
 | `src-tauri/src/horizon.rs` | поиск и запуск CLI, статус, `setup` (install → prepare → instance), `play` |
+| `horizon.rs`, `install_from_service` | первая установка Horizon с нашего сервера (`base` в `pack.json`, `scripts/release-pack.sh --base`), если GitHub недоступен игроку; не вышло — обычный `install` |
 | `src-tauri/src/bootstrap.rs` | скачивание `horizon-launcher` из релизов, проверка SHA-256 |
 | `src-tauri/src/skins.rs` | библиотека скинов; стандартные вшиты из `src-tauri/skins/` |
 | `src-tauri/src/shaders.rs` | шейдеры instance WCraft: каталог из реестра Horizon, установка и включение через CLI (`mods`, `packs`) |

@@ -20,6 +20,9 @@ pub struct Pack {
     /// The server runs in online mode with our session service (`Published::sessions`).
     #[serde(default)]
     pub sessions: bool,
+    /// Horizon's own build of `horizon_version` for this platform, mirrored on our service (`Published::base`).
+    #[serde(default)]
+    pub base: Option<crate::update::Release>,
     /// The sources of the pack's client mods (`Published::mods_source`).
     #[serde(default)]
     pub mods_source: Option<crate::update::Release>,
@@ -32,6 +35,7 @@ pub fn pack() -> Pack {
         pack.server = published.server;
         pack.client = published.client.get(crate::update::PLATFORM).cloned();
         pack.sessions = published.sessions;
+        pack.base = published.base.filter(|b| b.version == pack.horizon_version).and_then(|b| b.files.get(crate::update::PLATFORM).cloned());
         pack.mods_source = published.mods_source;
     }
     pack
@@ -48,6 +52,10 @@ pub struct Published {
     /// folder (`scripts/release-pack.sh --client`). None: the version as Horizon published it.
     #[serde(default)]
     pub client: BTreeMap<String, crate::update::Release>,
+    /// Horizon's release archives of `horizon_version` as GitHub serves them, kept on our service for players GitHub does
+    /// not reach (`release-pack.sh --base`). Taken only while `version` is the pack's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<PublishedBase>,
     /// The server runs in online mode: the game gets a session from our service (`release-pack.sh --sessions`).
     #[serde(default)]
     pub sessions: bool,
@@ -55,6 +63,13 @@ pub struct Published {
     /// compiles them with the player's own mods.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mods_source: Option<crate::update::Release>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct PublishedBase {
+    pub version: String,
+    /// Per platform (`update::PLATFORM`).
+    pub files: BTreeMap<String, crate::update::Release>,
 }
 
 pub fn published() -> Option<Published> {
