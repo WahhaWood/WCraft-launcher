@@ -26,6 +26,8 @@ export type Settings = {
   accent: string
   /** Experimental: the Mods page, own native mods built into the game with WCraft's. */
   experimental_mods: boolean
+  /** Folder the game and its data were moved to; empty: the launcher's own folder. */
+  storage: string
 }
 export type Mod = { id: string; version: string; enabled: boolean }
 export type ModsState = {
@@ -146,6 +148,16 @@ export const api = {
   shadersOpenDir: () => call<void>('shaders_open_dir'),
   openLink: (url: string) => call<void>('open_link', { url }),
   openDataDir: () => call<void>('open_data_dir'),
+  storageOpen: () => call<void>('storage_open'),
+  /** Moves the game to `<folder>/wcraft-launcher` (empty: back to the default); resolves with the new location. */
+  storageSet: (folder: string) => call<string>('storage_set', { folder }),
+  /** The system folder picker; null when cancelled. */
+  pickFolder: async (): Promise<string | null> => {
+    if (mock) return mock.invoke<string | null>('pick_folder')
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const dir = await open({ directory: true, title: 'Куда перенести игру' })
+    return typeof dir === 'string' ? dir : null
+  },
   dataSize: () => call<number>('data_size'),
   modsState: () => call<ModsState>('mods_state'),
   /** An .hnmod, .hmod or .zip: its bytes go as the raw body. Gives the mod's id. */

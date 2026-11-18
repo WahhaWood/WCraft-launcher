@@ -33,6 +33,22 @@
     }
   }
 
+  let moving = $state(false)
+  let moveError = $state('')
+
+  async function moveStorage(folder: string | null) {
+    if (folder === null) return
+    moveError = ''
+    moving = true
+    try {
+      app.settings.storage = await api.storageSet(folder)
+      size = await api.dataSize()
+    } catch (e) {
+      moveError = String(e)
+    }
+    moving = false
+  }
+
   $effect(() => {
     void api.dataSize().then((b) => (size = b))
   })
@@ -125,6 +141,24 @@
         <span class="size">{size === null ? '…' : gb(size)}</span>
       </div>
       <button class="btn" onclick={() => api.openDataDir()}><Icon name="folder" /> Открыть папку</button>
+    </div>
+
+    <div class="item">
+      <b>Где хранится игра</b>
+      <p>
+        {app.settings.storage || 'Папка лаунчера по умолчанию'}.
+        {moving ? 'Переношу файлы, это может занять несколько минут…' : 'Игра, Horizon и ресурсы переедут в выбранную папку; аккаунты и скины останутся на месте.'}
+      </p>
+      <div class="pair">
+        <button class="btn" disabled={!!app.busy || app.playing || moving} onclick={async () => moveStorage(await api.pickFolder())}>
+          <Icon name="folder" /> Выбрать папку…
+        </button>
+        {#if app.settings.storage}
+          <button class="btn ghost" disabled={!!app.busy || app.playing || moving} onclick={() => moveStorage('')}>По умолчанию</button>
+          <button class="btn ghost" onclick={() => api.storageOpen()}>Открыть</button>
+        {/if}
+      </div>
+      {#if moveError}<p class="warn">{moveError}</p>{/if}
     </div>
 
     <div class="item danger-zone" class:alert={confirming}>

@@ -47,7 +47,7 @@ const status: Status = {
   version: '0.1.0',
   logged_in: fresh ? [] : ['Wahha'],
 }
-let settings: Settings = { server: '', while_playing: 'minimize', game_args: '', accent: 'violet', experimental_mods: params.has('mods') }
+let settings: Settings = { server: '', while_playing: 'minimize', game_args: '', accent: 'violet', experimental_mods: params.has('mods'), storage: '' }
 
 // `?mods` turns the experimental Mods page on, with two own mods and a build that needs redoing.
 const ourMods = ['appleskin', 'chat_animation', 'chatheads', 'connected_textures', 'dynamic_fps_for_rust', 'dynamiclights', 'eatinganimation', 'enchantmenthints', 'map_preview', 'mousetricks', 'roughlyenoughitems', 'shulker_peek', 'voicechat', 'wcraft_presence', 'wcraft_tab', 'zoom']
@@ -369,6 +369,12 @@ const commands: Record<string, (args: any) => unknown> = {
   modrinth_install: () => new Promise((r) => setTimeout(r, 800)),
   open_link: () => {},
   open_data_dir: () => {},
+  storage_open: () => {},
+  pick_folder: () => '/mnt/games',
+  storage_set: (a) => {
+    settings.storage = a.folder ? `${a.folder}/wcraft-launcher` : ''
+    return settings.storage
+  },
   mods_state: () => structuredClone(mods),
   mods_add: (a) => {
     const id = a.name.replace(/\.(hnmod|hmod|zip)$/i, '').toLowerCase()

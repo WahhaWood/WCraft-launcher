@@ -75,6 +75,17 @@ pub fn data_dir() -> PathBuf {
     dir
 }
 
+/// Where the heavy part (the CLI's `horizon` and the game's `game` folders) lives: the player's choice or `data_dir()`.
+pub fn storage_dir() -> PathBuf {
+    let custom = Settings::load().storage;
+    if custom.trim().is_empty() {
+        return data_dir();
+    }
+    let dir = PathBuf::from(custom);
+    let _ = fs::create_dir_all(&dir);
+    dir
+}
+
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct Settings {
@@ -86,6 +97,9 @@ pub struct Settings {
     pub accent: String,
     /// Experimental: the Mods page, own native mods built into the game with WCraft's (`mods.rs`).
     pub experimental_mods: bool,
+    /// Empty: the game and the CLI's data live in the launcher's folder. Otherwise the folder they were moved to
+    /// (`set_storage` in `lib.rs`); accounts, skins and settings stay in the launcher's own folder.
+    pub storage: String,
 }
 
 impl Default for Settings {
@@ -96,6 +110,7 @@ impl Default for Settings {
             game_args: String::new(),
             accent: "violet".into(),
             experimental_mods: false,
+            storage: String::new(),
         }
     }
 }

@@ -251,8 +251,94 @@ fn settings_get() -> config::Settings {
 }
 
 #[tauri::command]
-fn settings_set(settings: config::Settings) -> Result<(), String> {
+fn settings_set(mut settings: config::Settings) -> Result<(), String> {
+    // Only `storage_set` changes it: it moves the files first.
+    settings.storage = config::Settings::load().storage;
     settings.save()
+}
+
+/// Folders of the heavy part, the ones `storage_set` moves.
+const STORAGE_PARTS: [&str; 2] = ["horizon", "game"];
+
+/// Moves the game and the CLI's data to `<folder>/wcraft-launcher` (empty `folder`: back to the launcher's own
+/// folder) and remembers it. Returns the new location, empty for the default one.
+#[tauri::command(async)]
+fn storage_set(folder: String, tasks: State<Tasks>) -> Result<String, String> {
+    if *tasks.playing.lock().unwrap() {
+        return Err("Сначала закройте игру".into());
+    }
+    if tasks.task.lock().unwrap().is_some() || tasks.game.lock().unwrap().is_some() {
+        return Err("Дождитесь окончания установки".into());
+    }
+    let folder = folder.trim();
+    let (from, to) = (config::storage_dir(), match folder {
+        "" => config::data_dir(),
+        f => std::path::PathBuf::from(f).join("wcraft-launcher"),
+    });
+    let same = |a: &std::path::Path, b: &std::path::Path| a.canonicalize().ok().zip(b.canonicalize().ok()).is_some_and(|(a, b)| a == b) || a == b;
+    if same(&from, &to) {
+        return Ok(config::Settings::load().storage);
+    }
+    if to.starts_with(&from) {
+        return Err("Нельзя переносить внутрь текущей папки с игрой".into());
+    }
+    std::fs::create_dir_all(&to).map_err(|e| format!("Не удалось создать {}: {e}", to.display()))?;
+    let mut moved: Vec<&str> = Vec::new();
+    for part in STORAGE_PARTS {
+        if let Err(e) = move_dir(&from.join(part), &to.join(part)) {
+            for done in moved {
+                let _ = move_dir(&to.join(done), &from.join(done));
+            }
+            return Err(format!("Не удалось перенести {part}: {e}"));
+        }
+        moved.push(part);
+    }
+    let mut settings = config::Settings::load();
+    settings.storage = if folder.is_empty() { String::new() } else { to.to_string_lossy().into_owned() };
+    settings.save()?;
+    // The old place is ours only when it was a folder `storage_set` made.
+    if from != config::data_dir() {
+        let _ = std::fs::remove_dir(&from);
+    }
+    Ok(settings.storage)
+}
+
+/// Renames, or copies and removes when `to` is on another disk. Leaves nothing half-done in `to` on failure.
+fn move_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    if !from.exists() {
+        return Ok(());
+    }
+    if to.exists() {
+        return Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, format!("{} уже существует", to.display())));
+    }
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    if let Err(e) = copy_tree(from, to) {
+        let _ = std::fs::remove_dir_all(to);
+        return Err(e);
+    }
+    std::fs::remove_dir_all(from)
+}
+
+fn copy_tree(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let (src, dst) = (entry.path(), to.join(entry.file_name()));
+        let kind = entry.file_type()?;
+        if kind.is_dir() {
+            copy_tree(&src, &dst)?;
+        } else if kind.is_symlink() {
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(std::fs::read_link(&src)?, &dst)?;
+            #[cfg(windows)]
+            std::fs::copy(&src, &dst).map(|_| ())?;
+        } else {
+            std::fs::copy(&src, &dst)?;
+        }
+    }
+    Ok(())
 }
 
 #[tauri::command(async)]
@@ -326,6 +412,11 @@ fn open_data_dir(app: AppHandle) -> Result<(), String> {
     app.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
 }
 
+#[tauri::command(async)]
+fn storage_open(app: AppHandle) -> Result<(), String> {
+    app.opener().open_path(config::storage_dir().to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
+}
+
 /// Removes everything the launcher put on this computer: its folder (the CLI, Horizon, the game,
 /// accounts, skins, settings) and the webview's own data, then quits. The program itself stays:
 /// the player deletes the file or runs the uninstaller.
@@ -336,6 +427,13 @@ fn wipe_data(app: AppHandle, tasks: State<Tasks>) -> Result<(), String> {
     }
     horizon::cancel(&tasks.task);
     let data = config::data_dir();
+    let storage = config::storage_dir();
+    if storage != data {
+        for part in STORAGE_PARTS {
+            remove_dir(&storage.join(part)).map_err(|e| format!("Не удалось удалить {}: {e}", storage.display()))?;
+        }
+        let _ = std::fs::remove_dir(&storage);
+    }
     remove_dir(&data).map_err(|e| format!("Не удалось удалить {}: {e}", data.display()))?;
     let path = app.path();
     let webview: Vec<_> = [path.app_data_dir(), path.app_local_data_dir(), path.app_cache_dir(), path.app_config_dir()]
@@ -559,7 +657,8 @@ fn resources_open_dir(app: AppHandle) -> Result<(), String> {
 /// Bytes the launcher's folder takes: everything `wipe_data` frees, but the webview's few MB.
 #[tauri::command(async)]
 fn data_size() -> u64 {
-    horizon::dir_size(&config::data_dir())
+    let (data, storage) = (config::data_dir(), config::storage_dir());
+    horizon::dir_size(&data) + if storage != data { horizon::dir_size(&storage) } else { 0 }
 }
 
 fn remove_dir(dir: &std::path::Path) -> std::io::Result<()> {
@@ -597,6 +696,7 @@ pub fn run() {
     std::thread::spawn(update::refresh_pack);
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Tasks::default())
         .invoke_handler(tauri::generate_handler![
             status,
@@ -644,6 +744,8 @@ pub fn run() {
             resources_open_dir,
             open_link,
             open_data_dir,
+            storage_set,
+            storage_open,
             wipe_data,
             data_size,
             mods_state,
@@ -672,6 +774,23 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn move_dir_moves_and_refuses_existing_target() {
+        let root = std::env::temp_dir().join(format!("wcraft-move-{}", std::process::id()));
+        let (from, to) = (root.join("a"), root.join("b"));
+        std::fs::create_dir_all(from.join("x/y")).unwrap();
+        std::fs::write(from.join("x/y/f.txt"), "hi").unwrap();
+        move_dir(&from, &to).unwrap();
+        assert!(!from.exists());
+        assert_eq!(std::fs::read_to_string(to.join("x/y/f.txt")).unwrap(), "hi");
+        std::fs::create_dir_all(&from).unwrap();
+        assert!(move_dir(&from, &to).is_err());
+        let copy = root.join("c");
+        copy_tree(&to, &copy).unwrap();
+        assert_eq!(std::fs::read_to_string(copy.join("x/y/f.txt")).unwrap(), "hi");
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     /// Pings wcraft.json's server through its tunnel: `cargo test -- --ignored live_server`.
     #[test]

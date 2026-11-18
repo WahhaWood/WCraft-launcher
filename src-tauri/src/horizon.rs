@@ -391,7 +391,7 @@ pub fn cancel(slot: &Slot) {
 /// The CLI's data folder, where installed versions and their prepared resources are. It is
 /// inside ours, so a player's own Horizon is never touched and wiping our folder removes it all.
 fn home() -> PathBuf {
-    config::data_dir().join("horizon")
+    config::storage_dir().join("horizon")
 }
 
 pub fn launcher_home() -> PathBuf {
@@ -399,8 +399,8 @@ pub fn launcher_home() -> PathBuf {
 }
 
 /// Where the game keeps instances, options and logs.
-fn game_home() -> PathBuf {
-    config::data_dir().join("game")
+pub fn game_home() -> PathBuf {
+    config::storage_dir().join("game")
 }
 
 /// The prepared resources of a version (`…/horizon-client/26.3`), once `prepare` made them.
