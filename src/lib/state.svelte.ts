@@ -1,12 +1,14 @@
 import { api, on, type Library, type ServerStatus, type Settings, type Skin, type Status, type Update } from './api'
 
-export type Page = 'play' | 'skins' | 'shaders' | 'resources' | 'settings' | 'log'
+export type Page = 'play' | 'skins' | 'shaders' | 'resources' | 'mods' | 'settings' | 'log'
 
 export const app = $state({
   page: 'play' as Page,
   status: null as Status | null,
-  /** A task of ours is running: setting up before the game starts. */
-  busy: null as null | 'setup',
+  /** A task of ours is running: setting up before the game starts, or compiling the game with own mods. */
+  busy: null as null | 'setup' | 'build',
+  /** When the running task started (ms), for the build's timer. */
+  since: 0,
   step: '',
   lastLine: '',
   /** How far setup is in bytes, and the seconds it should still take (null until the pace is known). */
@@ -16,7 +18,7 @@ export const app = $state({
   playing: false,
   /** null: not asked yet; 'offline': no answer. */
   server: null as ServerStatus | 'offline' | null,
-  settings: { server: '', while_playing: 'minimize', game_args: '', accent: 'violet' } as Settings,
+  settings: { server: '', while_playing: 'minimize', game_args: '', accent: 'violet', experimental_mods: false } as Settings,
   skins: null as Library | null,
   /** Skins the server's players published, by name. */
   players: {} as Record<string, Skin>,
@@ -80,10 +82,11 @@ function onProgress(p: { done: number; total: number } | null) {
   app.progress = { ...p, eta: secs >= 5 && rate > 0 ? Math.max(0, p.total - p.done) / rate : null, speed }
 }
 
-async function task(kind: 'setup', step: string, run: () => Promise<void>) {
+async function task(kind: 'setup' | 'build', step: string, run: () => Promise<void>) {
   if (app.busy) return
   app.error = ''
   app.busy = kind
+  app.since = Date.now()
   app.step = step
   app.lastLine = ''
   onProgress(null)
@@ -107,6 +110,12 @@ export const play = () =>
     app.step = 'Проверяю файлы'
     await api.play()
     app.playing = true
+  })
+
+/** Compiles the game with WCraft's mods and the player's own. Its error stays in `app.error`. */
+export const buildMods = () =>
+  task('build', 'Готовлю сборку', async () => {
+    await api.modsBuild()
   })
 
 export const authenticate = (register: boolean, name: string, password: string) =>

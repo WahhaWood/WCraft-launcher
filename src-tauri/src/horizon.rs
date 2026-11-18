@@ -330,11 +330,16 @@ fn pump(mut pipe: impl Read + Send + 'static, emit: Emit, last: Arc<Mutex<String
 /// Runs a long command, its output going to the window line by line. The child sits in `slot`
 /// meanwhile: taking it out (see `cancel`) ends the run.
 pub fn run(args: &[&str], slot: &Slot, emit: &Emit) -> Result<(), String> {
+    run_with(args, &[], slot, emit).map(drop)
+}
+
+/// `run`, giving the last line the command printed.
+pub fn run_last(args: &[&str], slot: &Slot, emit: &Emit) -> Result<String, String> {
     run_with(args, &[], slot, emit)
 }
 
-/// `run` with environment variables, which the game inherits from horizon-launcher.
-fn run_with(args: &[&str], env: &[(&str, String)], slot: &Slot, emit: &Emit) -> Result<(), String> {
+/// `run` with environment variables, which the game inherits from horizon-launcher; gives the last line printed.
+fn run_with(args: &[&str], env: &[(&str, String)], slot: &Slot, emit: &Emit) -> Result<String, String> {
     emit("log", Value::String(format!("> horizon-launcher {}", args.join(" "))));
     let mut child = command(args)?
         .envs(env.iter().map(|(k, v)| (k, v)))
@@ -368,10 +373,10 @@ fn run_with(args: &[&str], env: &[(&str, String)], slot: &Slot, emit: &Emit) -> 
     for r in readers {
         let _ = r.join();
     }
-    if status.success() {
-        return Ok(());
-    }
     let last = last.lock().unwrap().clone();
+    if status.success() {
+        return Ok(last);
+    }
     Err(if last.is_empty() { format!("Команда завершилась с кодом {status}") } else { last })
 }
 
@@ -387,6 +392,10 @@ pub fn cancel(slot: &Slot) {
 /// inside ours, so a player's own Horizon is never touched and wiping our folder removes it all.
 fn home() -> PathBuf {
     config::data_dir().join("horizon")
+}
+
+pub fn launcher_home() -> PathBuf {
+    home()
 }
 
 /// Where the game keeps instances, options and logs.
@@ -456,7 +465,7 @@ fn installed_versions() -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn is_installed(tag: &str) -> bool {
+pub fn is_installed(tag: &str) -> bool {
     installed_versions().iter().any(|t| t == tag)
 }
 
@@ -638,13 +647,22 @@ pub fn setup(slot: &Slot, emit: &Emit) -> Result<(), String> {
         json_task(&["instance", "create", &pack.instance])?;
     }
     check_cancel()?;
-    let plays = match &pack.client {
+    let official = match &pack.client {
         Some(client) => client_version(client, tag, emit)?,
         None => tag.to_string(),
     };
+    // Experimental: the game built with the player's own mods, while it is built from the mods and pack there are now.
+    let plays = match crate::mods::ready_build().filter(|t| is_installed(t)) {
+        Some(built) => {
+            emit("log", Value::String(format!("Играю со своими модами: {built}")));
+            built
+        }
+        None => official.clone(),
+    };
     json_task(&["instance", "version", &pack.instance, &plays])?;
+    let kept = crate::mods::kept_build();
     // A version the pack moved away from only takes room (about a gigabyte and a half each).
-    for old in installed_versions().into_iter().filter(|t| t != tag && *t != plays) {
+    for old in installed_versions().into_iter().filter(|t| t != tag && *t != plays && *t != official && Some(t) != kept.as_ref()) {
         step("Удаляю старую версию игры");
         if let Err(e) = json(&["remove", &old]) {
             emit("log", Value::String(format!("Версия {old} не удалена: {e}")));
@@ -824,7 +842,7 @@ pub fn play(slot: &Slot, emit: &Emit) -> Result<(), String> {
         Some(session) => game_session_env(&session)?,
         None => Vec::new(),
     };
-    run_with(&args, &env, slot, emit)
+    run_with(&args, &env, slot, emit).map(drop)
 }
 
 /// The game's session file (read once, deleted by the game, at most 120 s old, owner-only) and the discovery

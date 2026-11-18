@@ -20,6 +20,9 @@ pub struct Pack {
     /// The server runs in online mode with our session service (`Published::sessions`).
     #[serde(default)]
     pub sessions: bool,
+    /// The sources of the pack's client mods (`Published::mods_source`).
+    #[serde(default)]
+    pub mods_source: Option<crate::update::Release>,
 }
 
 pub fn pack() -> Pack {
@@ -29,6 +32,7 @@ pub fn pack() -> Pack {
         pack.server = published.server;
         pack.client = published.client.get(crate::update::PLATFORM).cloned();
         pack.sessions = published.sessions;
+        pack.mods_source = published.mods_source;
     }
     pack
 }
@@ -47,6 +51,10 @@ pub struct Published {
     /// The server runs in online mode: the game gets a session from our service (`release-pack.sh --sessions`).
     #[serde(default)]
     pub sessions: bool,
+    /// A zip of the client mods' sources (`mods/client`, `release-pack.sh --mods-source`): the experimental mods page
+    /// compiles them with the player's own mods.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mods_source: Option<crate::update::Release>,
 }
 
 pub fn published() -> Option<Published> {
@@ -76,6 +84,8 @@ pub struct Settings {
     pub while_playing: String,
     pub game_args: String,
     pub accent: String,
+    /// Experimental: the Mods page, own native mods built into the game with WCraft's (`mods.rs`).
+    pub experimental_mods: bool,
 }
 
 impl Default for Settings {
@@ -85,6 +95,7 @@ impl Default for Settings {
             while_playing: "minimize".into(),
             game_args: String::new(),
             accent: "violet".into(),
+            experimental_mods: false,
         }
     }
 }

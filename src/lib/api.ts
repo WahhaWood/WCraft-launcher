@@ -19,7 +19,26 @@ export type Status = {
   logged_in: string[]
 }
 export type ServerStatus = { online: number; max: number; version: string; ping_ms: number; players: string[] }
-export type Settings = { server: string; while_playing: 'stay' | 'minimize' | 'hide'; game_args: string; accent: string }
+export type Settings = {
+  server: string
+  while_playing: 'stay' | 'minimize' | 'hide'
+  game_args: string
+  accent: string
+  /** Experimental: the Mods page, own native mods built into the game with WCraft's. */
+  experimental_mods: boolean
+}
+export type Mod = { id: string; version: string; enabled: boolean }
+export type ModsState = {
+  /** WCraft's mods, always built in. */
+  ours: Mod[]
+  mine: Mod[]
+  /** none: no own mod is on, the game plays as WCraft ships it. */
+  build: 'none' | 'missing' | 'stale' | 'ready'
+  /** The pack publishes WCraft's mod sources: building is possible. */
+  sources: boolean
+  /** Bytes Rust, the compile cache and the built game take. */
+  toolchain_size: number
+}
 export type Skin = { id: string; name: string; model: 'classic' | 'slim'; url: string }
 export type Update = { version: string; size: number }
 export type CatalogSkin = { id: string; title: string; model: 'classic' | 'slim'; preview: string; wearers: number }
@@ -128,5 +147,21 @@ export const api = {
   openLink: (url: string) => call<void>('open_link', { url }),
   openDataDir: () => call<void>('open_data_dir'),
   dataSize: () => call<number>('data_size'),
+  modsState: () => call<ModsState>('mods_state'),
+  /** An .hnmod, .hmod or .zip: its bytes go as the raw body. Gives the mod's id. */
+  modsAdd: async (file: File) => {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const headers = { 'x-name': encodeURIComponent(file.name) }
+    return mock ? mock.invoke<string>('mods_add', { name: file.name }) : invoke<string>('mods_add', bytes, { headers })
+  },
+  modsSet: (id: string, on: boolean) => call<void>('mods_set', { id, on }),
+  modsRemove: (id: string) => call<void>('mods_remove', { id }),
+  modsOpenDir: () => call<void>('mods_open_dir'),
+  /** Compiles the game with WCraft's mods and the player's; `cancel` stops it. */
+  modsBuild: () => call<void>('mods_build'),
+  /** Removes Rust, the compile cache and the built game. */
+  modsClean: () => call<void>('mods_clean'),
+  /** Starts the launcher again. */
+  restart: () => call<void>('restart'),
   wipeData: () => call<void>('wipe_data'),
 }

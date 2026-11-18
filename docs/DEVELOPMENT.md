@@ -39,6 +39,7 @@ Windows с Linux: `scripts/build-windows.sh` (в основном репозит
 | `src-tauri/src/skins.rs` | библиотека скинов; стандартные вшиты из `src-tauri/skins/` |
 | `src-tauri/src/shaders.rs` | шейдеры instance WCraft: каталог из реестра Horizon, установка и включение через CLI (`mods`, `packs`) |
 | `src-tauri/src/ping.rs` | статус сервера (Server List Ping) |
+| `src-tauri/src/mods.rs` | экспериментальные свои моды: `.hnmod` игрока в `mods/user/`, исходники модов WCraft из пака (`mods_source`, для разработки `WCRAFT_MODS_SRC=<WCraft>/mods/client`), сборка через `native-build`; `setup` играет её, пока она собрана из тех же модов и пака |
 | `src-tauri/src/update.rs` | самообновление: подписанный `latest.json` с сервиса, замена .exe / AppImage |
 | `src-tauri/src/lib.rs` | команды Tauri, поведение окна во время игры |
 | `src/lib/state.svelte.ts` | состояние интерфейса и действия |

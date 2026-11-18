@@ -2,6 +2,7 @@ mod auth;
 mod bootstrap;
 mod config;
 mod horizon;
+mod mods;
 mod ping;
 mod modrinth;
 mod resources;
@@ -456,6 +457,73 @@ fn shaders_add(request: tauri::ipc::Request<'_>, tasks: State<'_, Tasks>) -> Res
     shaders::add(&percent_decode(name), bytes)
 }
 
+#[tauri::command(async)]
+fn mods_state() -> mods::State {
+    mods::state(horizon::is_installed)
+}
+
+/// A mod file the player picked: its bytes as the raw body, its name URI-encoded in a header. Gives the mod's id.
+#[tauri::command(async)]
+fn mods_add(request: tauri::ipc::Request<'_>) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Нет файла".into());
+    };
+    let name = request.headers().get("x-name").and_then(|v| v.to_str().ok()).unwrap_or_default();
+    mods::add(&percent_decode(name), bytes)
+}
+
+#[tauri::command(async)]
+fn mods_set(id: String, on: bool) -> Result<(), String> {
+    mods::set(&id, on)
+}
+
+#[tauri::command(async)]
+fn mods_remove(id: String) -> Result<(), String> {
+    mods::remove(&id)
+}
+
+#[tauri::command(async)]
+fn mods_open_dir(app: AppHandle) -> Result<(), String> {
+    let dir = mods::folder()?;
+    app.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
+}
+
+/// Compiles the game with WCraft's mods and the player's; `cancel` stops it.
+#[tauri::command(async)]
+fn mods_build(app: AppHandle, tasks: State<Tasks>) -> Result<(), String> {
+    if *tasks.playing.lock().unwrap() {
+        return Err("Сначала закройте игру".into());
+    }
+    horizon::reset_cancel();
+    mods::build(&tasks.task, &emitter(&app))
+}
+
+#[tauri::command(async)]
+fn mods_clean(tasks: State<Tasks>) -> Result<(), String> {
+    if *tasks.playing.lock().unwrap() {
+        return Err("Сначала закройте игру".into());
+    }
+    mods::clean()
+}
+
+/// Starts the launcher again (the experimental mode changes what it shows). A dev run only reloads the window.
+#[tauri::command(async)]
+fn restart(app: AppHandle, tasks: State<Tasks>) -> Result<(), String> {
+    if *tasks.playing.lock().unwrap() {
+        return Err("Лаунчер перезапустится после выхода из игры".into());
+    }
+    let Some(file) = update::target() else {
+        let window = app.get_webview_window("main").ok_or("Нет окна")?;
+        return window.eval("location.reload()").map_err(|e| e.to_string());
+    };
+    let mut command = std::process::Command::new(&file);
+    // As in `update_install`: the AppImage's GTK hook would keep this run's APPDIR, unmounted once it exits.
+    command.env_remove("APPDIR");
+    command.spawn().map_err(|e| format!("{}: {e}", file.display()))?;
+    app.exit(0);
+    Ok(())
+}
+
 /// `encodeURIComponent` undone.
 fn percent_decode(s: &str) -> String {
     let b = s.as_bytes();
@@ -577,7 +645,15 @@ pub fn run() {
             open_link,
             open_data_dir,
             wipe_data,
-            data_size
+            data_size,
+            mods_state,
+            mods_add,
+            mods_set,
+            mods_remove,
+            mods_open_dir,
+            mods_build,
+            mods_clean,
+            restart
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

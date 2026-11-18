@@ -112,6 +112,11 @@
       <button class="tool" class:on={app.page === 'resources'} onclick={() => toggle('resources')}>
         <Icon name="folder" /> Ресурспаки
       </button>
+      {#if app.settings.experimental_mods}
+        <button class="tool" class:on={app.page === 'mods'} onclick={() => toggle('mods')}>
+          <Icon name="cube" /> Моды
+        </button>
+      {/if}
       <button class="tool" class:on={drawer} onclick={() => toggle('settings')}>
         <Icon name="sliders" /> Настройки
       </button>
@@ -128,7 +133,7 @@
 
   <main>
     <!-- One 3D player at a time: the skins page has its own; the shaders page covers it. -->
-    {#if app.page !== 'skins' && app.page !== 'shaders' && app.page !== 'resources'}<Play />{/if}
+    {#if app.page !== 'skins' && app.page !== 'shaders' && app.page !== 'resources' && app.page !== 'mods'}<Play />{/if}
 
     {#if app.page === 'skins'}
       <div class="page">
@@ -150,6 +155,14 @@
       <div class="page">
         {#await import('./pages/Shaders.svelte') then page}
           <page.default kind="resource" />
+        {/await}
+      </div>
+    {/if}
+
+    {#if app.page === 'mods'}
+      <div class="page">
+        {#await import('./pages/Mods.svelte') then page}
+          <page.default />
         {/await}
       </div>
     {/if}

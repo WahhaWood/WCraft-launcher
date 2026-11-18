@@ -1,5 +1,5 @@
 // Stand-in for the Rust side when the UI runs in a plain browser (vite dev). Not in release builds.
-import type { Library, Settings, Shader, Skin, Status } from './api'
+import type { Library, ModsState, Settings, Shader, Skin, Status } from './api'
 import { thumbnail } from './skin'
 
 const handlers = new Map<string, ((p: any) => void)[]>()
@@ -47,7 +47,18 @@ const status: Status = {
   version: '0.1.0',
   logged_in: fresh ? [] : ['Wahha'],
 }
-let settings: Settings = { server: '', while_playing: 'minimize', game_args: '', accent: 'violet' }
+let settings: Settings = { server: '', while_playing: 'minimize', game_args: '', accent: 'violet', experimental_mods: params.has('mods') }
+
+// `?mods` turns the experimental Mods page on, with two own mods and a build that needs redoing.
+const ourMods = ['appleskin', 'chat_animation', 'chatheads', 'connected_textures', 'dynamic_fps_for_rust', 'dynamiclights', 'eatinganimation', 'enchantmenthints', 'map_preview', 'mousetricks', 'roughlyenoughitems', 'shulker_peek', 'voicechat', 'wcraft_presence', 'wcraft_tab', 'zoom']
+const mods: ModsState = {
+  ours: ourMods.map((id) => ({ id, version: '1.0.0', enabled: true })),
+  mine: params.has('mods') ? [{ id: 'veinminer', version: '0.3.1', enabled: true }, { id: 'better_f3', version: '1.2.0', enabled: false }] : [],
+  build: params.has('mods') ? 'stale' : 'none',
+  sources: true,
+  toolchain_size: 4_300_000_000,
+}
+const rebuilt = () => (mods.build = mods.mine.some((m) => m.enabled) ? 'stale' : 'none')
 
 // A few of Horizon's registry shader packs, as shaders_list gives them. `?shaders` has two installed, one on.
 const shaders: Shader[] = [
@@ -358,6 +369,36 @@ const commands: Record<string, (args: any) => unknown> = {
   modrinth_install: () => new Promise((r) => setTimeout(r, 800)),
   open_link: () => {},
   open_data_dir: () => {},
+  mods_state: () => structuredClone(mods),
+  mods_add: (a) => {
+    const id = a.name.replace(/\.(hnmod|hmod|zip)$/i, '').toLowerCase()
+    mods.mine = [...mods.mine.filter((m) => m.id !== id), { id, version: '0.1.0', enabled: true }]
+    rebuilt()
+    return id
+  },
+  mods_set: (a) => {
+    const m = mods.mine.find((m) => m.id === a.id)
+    if (m) m.enabled = a.on
+    rebuilt()
+  },
+  mods_remove: (a) => {
+    mods.mine = mods.mine.filter((m) => m.id !== a.id)
+    rebuilt()
+  },
+  mods_open_dir: () => {},
+  mods_build: async () => {
+    for (const [step, line] of [
+      ['Проверяю, может ли компьютер собрать игру', ''],
+      ['Компилирую игру с модами: первый раз 10–30 минут, дальше быстрее', '[ 0:42] Compiling the game'],
+    ]) {
+      emit('step', step)
+      if (line) emit('log', line)
+      await wait(1500)
+    }
+    mods.build = 'ready'
+  },
+  mods_clean: () => void (mods.toolchain_size = 0),
+  restart: () => location.reload(),
 }
 
 export default {

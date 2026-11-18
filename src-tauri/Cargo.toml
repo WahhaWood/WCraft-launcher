@@ -25,12 +25,12 @@ dirs = "6"
 md5 = "0.7"
 flate2 = "1"
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(not(windows))'.dependencies]
 tar = { version = "0.4", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
-zip = { version = "2", default-features = false, features = ["deflate"] }
 windows-sys = { version = "0.61", features = ["Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]

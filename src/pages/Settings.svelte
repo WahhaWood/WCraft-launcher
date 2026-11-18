@@ -15,6 +15,23 @@
   let confirming = $state(false)
   let wipeError = $state('')
   let more = $state(!!app.settings.server || !!app.settings.game_args)
+  /** The experimental switch was pressed: the launcher restarts once the player agrees. */
+  let restarting = $state(false)
+  let restartError = $state('')
+
+  async function experimental(on: boolean) {
+    restartError = ''
+    app.settings.experimental_mods = on
+    try {
+      await api.settingsSet($state.snapshot(app.settings))
+      await api.restart()
+    } catch (e) {
+      app.settings.experimental_mods = !on
+      await api.settingsSet($state.snapshot(app.settings)).catch(() => {})
+      restartError = String(e)
+      restarting = false
+    }
+  }
 
   $effect(() => {
     void api.dataSize().then((b) => (size = b))
@@ -60,6 +77,42 @@
           <button class:on={app.settings.while_playing === id} onclick={() => ((app.settings.while_playing = id), saveSettings())}>{label}</button>
         {/each}
       </div>
+    </div>
+
+    <h2>Экспериментальное</h2>
+    <div class="item exp" class:alert={restarting}>
+      <div class="split">
+        <div>
+          <b><Icon name="flask" /> Свои моды</b>
+          <p>Вкладка «Моды»: добавь свой нативный мод Horizon, и лаунчер соберёт игру с ним и с модами WCraft.</p>
+        </div>
+        <button
+          class="switch"
+          class:on={app.settings.experimental_mods}
+          role="switch"
+          aria-checked={app.settings.experimental_mods}
+          aria-label="Свои моды"
+          disabled={!!app.busy || app.playing || restarting}
+          onclick={() => ((restarting = true), (restartError = ''))}
+        >
+          <span class="knob"></span>
+        </button>
+      </div>
+      {#if restarting}
+        <p class="warn">
+          {app.settings.experimental_mods
+            ? 'Вкладка «Моды» пропадёт, игра запустится в обычной сборке WCraft. Твои моды останутся на диске.'
+            : 'Режим не для всех: сборка идёт на твоём компьютере (первый раз 10–30 минут и около 8 ГБ на диске), а код модов работает без песочницы.'}
+          Лаунчер перезапустится.
+        </p>
+        <div class="pair">
+          <button class="btn primary" onclick={() => experimental(!app.settings.experimental_mods)}>
+            {app.settings.experimental_mods ? 'Выключить и перезапустить' : 'Включить и перезапустить'}
+          </button>
+          <button class="btn ghost" onclick={() => (restarting = false)}>Отмена</button>
+        </div>
+      {/if}
+      {#if restartError}<p class="warn">{restartError}</p>{/if}
     </div>
 
     <h2>Данные</h2>
@@ -214,6 +267,49 @@
   .size {
     font: 600 20px var(--font);
     font-variant-numeric: tabular-nums;
+  }
+
+  .item b :global(svg) {
+    vertical-align: -3px;
+    margin-right: 4px;
+    color: var(--accent);
+  }
+  .exp.alert {
+    border-color: color-mix(in oklab, var(--accent) 40%, transparent);
+  }
+  .exp .warn {
+    color: var(--warn);
+    margin-top: 6px;
+  }
+  .switch {
+    flex: none;
+    width: 42px;
+    height: 24px;
+    border-radius: 99px;
+    background: var(--surface-hi);
+    border: 1px solid var(--stroke);
+    position: relative;
+    transition: background 0.15s;
+  }
+  .switch .knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--ink-soft);
+    transition: transform 0.15s, background 0.15s;
+  }
+  .switch.on {
+    background: var(--accent);
+  }
+  .switch.on .knob {
+    transform: translateX(18px);
+    background: var(--accent-ink);
+  }
+  .switch:disabled {
+    opacity: 0.5;
   }
 
   .danger-zone {
