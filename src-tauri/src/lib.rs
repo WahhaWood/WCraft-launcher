@@ -1,3 +1,4 @@
+mod applog;
 mod auth;
 mod bootstrap;
 mod config;
@@ -33,6 +34,11 @@ fn emitter(app: &AppHandle) -> Emit {
         if event == "signin" {
             if let Some(link) = payload["link"].as_str() {
                 let _ = app.opener().open_url(link, None::<&str>);
+            }
+        }
+        if matches!(event, "step" | "log") {
+            if let Some(text) = payload.as_str() {
+                applog::line(&format!("{event}: {text}"));
             }
         }
         let _ = app.emit(event, payload);
@@ -184,18 +190,22 @@ fn play(app: AppHandle, tasks: State<Tasks>) -> Result<(), String> {
     match horizon::interruptible(update::refresh_pack) {
         Err(e) => {
             *tasks.playing.lock().unwrap() = false;
+            applog::line(&format!("play: pack refresh interrupted: {e}"));
             return Err(e);
         }
         // Without any pack kept, the built-in one has no game build of ours: don't start the wrong game.
         Ok(Err(e)) if config::published().is_none() => {
             *tasks.playing.lock().unwrap() = false;
+            applog::line(&format!("play: no pack kept and refresh failed: {e}"));
             return Err(format!("Не удалось получить сборку WCraft, проверьте интернет и попробуйте снова: {e}"));
         }
         Ok(Err(e)) => emit("log", format!("Манифест сборки не обновлён: {e}").into()),
-        Ok(Ok(_)) => {}
+        Ok(Ok(changed)) => applog::line(&format!("play: pack {}", if changed { "updated" } else { "unchanged" })),
     }
+    applog::line(&format!("play: {}", applog::pack_summary()));
     if let Err(e) = horizon::setup(&tasks.task, &emit) {
         *tasks.playing.lock().unwrap() = false;
+        applog::line(&format!("play: setup failed: {e}"));
         return Err(e);
     }
     emit("step", "Запускаю игру".into());
@@ -692,6 +702,7 @@ pub fn run() {
         return;
     }
     update::clean_up();
+    applog::start();
     // In the background: the window starts on the kept pack, and Play asks again anyway.
     std::thread::spawn(update::refresh_pack);
     tauri::Builder::default()

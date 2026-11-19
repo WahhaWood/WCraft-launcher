@@ -670,6 +670,7 @@ pub fn setup(slot: &Slot, emit: &Emit) -> Result<(), String> {
         None => official.clone(),
     };
     json_task(&["instance", "version", &pack.instance, &plays])?;
+    emit("log", Value::String(format!("Профиль {} играет на {plays}", pack.instance)));
     let kept = crate::mods::kept_build();
     // A version the pack moved away from only takes room (about a gigabyte and a half each).
     for old in installed_versions().into_iter().filter(|t| t != tag && *t != plays && *t != official && Some(t) != kept.as_ref()) {
@@ -739,6 +740,7 @@ fn client_version(client: &update::Release, base: &str, emit: &Emit) -> Result<S
     if let Some(tag) = kept.as_ref().filter(same).and_then(|k| k["tag"].as_str()) {
         if is_installed(tag) {
             write_build_info(client, tag)?;
+            emit("log", Value::String(format!("Сборка WCraft уже стоит: {tag}")));
             return Ok(tag.to_string());
         }
     }
@@ -755,6 +757,7 @@ fn client_version(client: &update::Release, base: &str, emit: &Emit) -> Result<S
     emit("progress", Value::Null);
     let _ = std::fs::remove_file(&file);
     let tag = result?["imported"].as_str().ok_or("Сборка WCraft не установилась")?.to_string();
+    emit("log", Value::String(format!("Сборка WCraft установлена: {tag}")));
     let kept = json!({ "sha256": client.sha256, "base": base, "tag": tag });
     std::fs::write(&record, kept.to_string()).map_err(|e| e.to_string())?;
     write_build_info(client, &tag)?;
