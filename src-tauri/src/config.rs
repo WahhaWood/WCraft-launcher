@@ -14,6 +14,10 @@ pub struct Pack {
     /// gets a new one on every start.
     #[serde(default)]
     pub endpoint: String,
+    /// Other addresses of the same service, tried when `auth` and `endpoint` don't answer (a provider that blocks
+    /// one name).
+    #[serde(default)]
+    pub mirrors: Vec<String>,
     /// The game program with the pack's mods compiled in, for this platform (`Published::client`).
     #[serde(default)]
     pub client: Option<crate::update::Release>,

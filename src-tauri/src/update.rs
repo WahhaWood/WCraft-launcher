@@ -87,10 +87,19 @@ fn agent() -> ureq::Agent {
 }
 
 fn get(agent: &ureq::Agent, path: &str) -> Result<ureq::Response, String> {
-    agent.get(&auth::url(path)).call().map_err(|e| match e {
-        ureq::Error::Status(code, _) => format!("Сервер обновлений ответил {code}"),
-        _ => "Сервер обновлений недоступен".into(),
-    })
+    let mut tries = 0;
+    loop {
+        match agent.get(&auth::url(path)).call() {
+            Ok(response) => return Ok(response),
+            Err(ureq::Error::Status(code, _)) => return Err(format!("Сервер обновлений ответил {code}")),
+            // Not connected: look for another address of the service (a mirror) and try once more.
+            Err(_) if tries == 0 => {
+                tries += 1;
+                auth::failed();
+            }
+            Err(_) => return Err("Сервер обновлений недоступен".into()),
+        }
+    }
 }
 
 /// `path` and its `.sig` from the service, checked to be a `kind` manifest signed by the WCraft key.

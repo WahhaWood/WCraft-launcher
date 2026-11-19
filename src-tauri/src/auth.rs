@@ -34,27 +34,52 @@ pub fn url(path: &str) -> String {
     format!("{}{path}", base.trim_end_matches('/'))
 }
 
-/// The service's address now: the published one (`endpoint`), asked at most every 5 minutes; the last one
-/// heard, kept on disk, when it can't be asked; the pack's `auth` before anything was ever heard.
+static CACHE: Mutex<Option<(Instant, String)>> = Mutex::new(None);
+
+/// The service's address now, asked at most every 5 minutes: the first of these that answers `/launcher/latest.json`
+/// (4 s each): the published one (`endpoint`) and the mirrors it names, the last one that worked (kept on disk), the
+/// pack's `auth` and its `mirrors`. None answering, the first one: the request then fails as it would have.
 fn base() -> String {
-    static CACHE: Mutex<Option<(Instant, String)>> = Mutex::new(None);
-    let mut cache = CACHE.lock().unwrap();
-    if let Some((at, url)) = &*cache {
+    if let Some((at, url)) = &*CACHE.lock().unwrap() {
         if at.elapsed() < Duration::from_secs(300) {
             return url.clone();
         }
     }
     let saved = config::data_dir().join("auth-endpoint.txt");
-    let url = published()
-        .inspect(|url| drop(fs::write(&saved, url)))
-        .or_else(|| fs::read_to_string(&saved).ok().map(|s| s.trim().to_owned()).filter(|s| s.starts_with("https://")))
-        .unwrap_or_else(|| config::pack().auth);
-    *cache = Some((Instant::now(), url.clone()));
+    let pack = config::pack();
+    let mut candidates: Vec<String> = Vec::new();
+    if let Some((auth, mirrors)) = published() {
+        candidates.push(auth);
+        candidates.extend(mirrors);
+    }
+    candidates.extend(fs::read_to_string(&saved).ok().map(|s| s.trim().to_owned()).filter(|s| s.starts_with("https://")));
+    candidates.push(pack.auth);
+    candidates.extend(pack.mirrors);
+    let mut seen = std::collections::HashSet::new();
+    candidates.retain(|c| seen.insert(c.trim_end_matches('/').to_owned()));
+    let url = match candidates.iter().find(|c| alive(c)) {
+        Some(url) => {
+            drop(fs::write(&saved, url));
+            url.clone()
+        }
+        None => candidates[0].clone(),
+    };
+    *CACHE.lock().unwrap() = Some((Instant::now(), url.clone()));
     url
 }
 
-/// `{"auth": "https://..."}` from the pack's `endpoint` (GitHub's contents API, raw).
-fn published() -> Option<String> {
+/// Whether the service answers at `base`.
+fn alive(base: &str) -> bool {
+    ureq::get(&format!("{}/launcher/latest.json", base.trim_end_matches('/'))).timeout(Duration::from_secs(4)).call().is_ok()
+}
+
+/// A request to the service failed to connect: the next one looks for an address that answers.
+pub fn failed() {
+    *CACHE.lock().unwrap() = None;
+}
+
+/// `{"auth": "https://...", "mirrors": ["https://..."]}` from the pack's `endpoint` (GitHub's contents API, raw).
+fn published() -> Option<(String, Vec<String>)> {
     let endpoint = config::pack().endpoint;
     if endpoint.is_empty() {
         return None;
@@ -66,7 +91,9 @@ fn published() -> Option<String> {
         .ok()?
         .into_json()
         .ok()?;
-    reply["auth"].as_str().filter(|u| u.starts_with("https://")).map(str::to_owned)
+    let https = |v: &Value| v.as_str().filter(|u| u.starts_with("https://")).map(str::to_owned);
+    let mirrors = reply["mirrors"].as_array().map(|a| a.iter().filter_map(https).collect()).unwrap_or_default();
+    Some((https(&reply["auth"])?, mirrors))
 }
 
 /// The names this computer is logged in as.
@@ -242,7 +269,7 @@ mod tests {
     #[test]
     #[ignore]
     fn endpoint_is_the_live_service() {
-        let url = super::published().expect("endpoint.json answers");
+        let url = super::published().expect("endpoint.json answers").0;
         assert_eq!(url, "https://wcraft-play.duckdns.org");
         assert_eq!(ureq::get(&format!("{url}/api/skins")).call().unwrap().status(), 200);
     }
