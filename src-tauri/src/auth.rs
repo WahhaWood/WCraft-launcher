@@ -188,7 +188,9 @@ pub fn join(name: &str) -> Result<Option<Value>, String> {
     let Some(token) = all.get(name).cloned() else {
         return Err(format!("Войдите в аккаунт {name}: меню ника → «Другой аккаунт»"));
     };
-    match post("/api/join", json!({ "version": env!("CARGO_PKG_VERSION") }), Some(&token)) {
+    let custom_mods = config::Settings::load().experimental_mods.then(crate::mods::mine);
+    let body = json!({ "version": env!("CARGO_PKG_VERSION"), "custom_mods": custom_mods });
+    match post("/api/join", body, Some(&token)) {
         Ok(reply) => Ok(Some(reply["session"].clone()).filter(|s| s["token"].is_string())),
         Err((401, _)) => {
             all.remove(name);

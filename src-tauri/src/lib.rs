@@ -833,7 +833,7 @@ mod tests {
         assert_eq!(status.version, "26.3");
     }
 
-    static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    pub(super) static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn sidecar_is_found() {
@@ -891,6 +891,7 @@ mod tests {
         assert_eq!(defaults.len(), 9);
         assert!(defaults.iter().any(|s| s.id == "default:alex" && s.model == "slim"));
         let _ = std::fs::remove_dir_all(home);
+        std::env::remove_var("WCRAFT_HOME");
     }
 
     /// Needs backend/auth running at wcraft.json's `auth`, with a throwaway database and server folder:

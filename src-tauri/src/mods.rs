@@ -465,6 +465,7 @@ mod tests {
     #[test]
     fn adds_a_zipped_mod_folder() {
         use std::io::Write;
+        let _guard = crate::tests::TEST_LOCK.lock().unwrap();
         let home = std::env::temp_dir().join(format!("wcraft-mods-home-{}", std::process::id()));
         let _ = fs::remove_dir_all(&home);
         std::env::set_var("WCRAFT_HOME", &home);
@@ -489,6 +490,7 @@ mod tests {
         remove("my_mod").unwrap();
         assert!(mine().is_empty());
         let _ = fs::remove_dir_all(&home);
+        std::env::remove_var("WCRAFT_HOME");
     }
 
     /// The whole build on a real data folder: `WCRAFT_HOME=<a copy> WCRAFT_MODS_SRC=<WCraft>/mods/client

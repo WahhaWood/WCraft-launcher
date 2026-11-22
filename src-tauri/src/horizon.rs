@@ -221,15 +221,14 @@ fn embedded_cli() -> Option<PathBuf> {
     None
 }
 
-/// 1. OTA update in data dir (~/.local/share/wcraft-launcher/bin)
-/// 2. CLI embedded in the executable (single-file Windows build)
-/// 3. Bundled sidecar inside the application package (or src-tauri/binaries in dev)
+/// 1. CLI embedded in the executable (single-file Windows build)
+/// 2. Bundled sidecar inside the application package (or src-tauri/binaries in dev)
+/// 3. Bootstrap download in the data dir (~/.local/share/wcraft-launcher/bin)
 /// 4. PATH / ~/.local/bin (only if offline-capable)
 pub fn cli() -> Option<PathBuf> {
-    find_in(&bin_dir(), 2)
-        .filter(|p| is_offline_capable(p))
-        .or_else(embedded_cli)
+    embedded_cli()
         .or_else(sidecar_path)
+        .or_else(|| find_in(&bin_dir(), 2).filter(|p| is_offline_capable(p)))
         .or_else(|| {
             std::env::var_os("PATH")
                 .and_then(|p| std::env::split_paths(&p).map(|d| d.join(EXE)).find(|f| f.is_file()))
