@@ -142,8 +142,10 @@
         <i class="dot"></i> В сети
         <span class="sep"></span>
         <b>{server.online}</b>&nbsp;из {server.max}
-        <span class="sep"></span>
-        {server.ping_ms} мс
+        {#if server.ping_ms !== null}
+          <span class="sep"></span>
+          {server.ping_ms} мс
+        {/if}
       {/if}
     </div>
 

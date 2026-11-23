@@ -18,7 +18,7 @@ export type Status = {
   /** Names logged in to their WCraft account on this computer. */
   logged_in: string[]
 }
-export type ServerStatus = { online: number; max: number; version: string; ping_ms: number; players: string[] }
+export type ServerStatus = { online: number; max: number; version: string; ping_ms: number | null; players: string[] }
 export type Settings = {
   server: string
   connection_route: 'pack' | 'direct' | 'proxy'

@@ -46,17 +46,7 @@ fn base() -> String {
         }
     }
     let saved = config::data_dir().join("auth-endpoint.txt");
-    let pack = config::pack();
-    let mut candidates: Vec<String> = Vec::new();
-    if let Some((auth, mirrors)) = published() {
-        candidates.push(auth);
-        candidates.extend(mirrors);
-    }
-    candidates.extend(fs::read_to_string(&saved).ok().map(|s| s.trim().to_owned()).filter(|s| s.starts_with("https://")));
-    candidates.push(pack.auth);
-    candidates.extend(pack.mirrors);
-    let mut seen = std::collections::HashSet::new();
-    candidates.retain(|c| seen.insert(c.trim_end_matches('/').to_owned()));
+    let candidates = endpoints();
     let url = match candidates.iter().find(|c| alive(c)) {
         Some(url) => {
             drop(fs::write(&saved, url));
@@ -66,6 +56,32 @@ fn base() -> String {
     };
     *CACHE.lock().unwrap() = Some((Instant::now(), url.clone()));
     url
+}
+
+pub fn download_endpoints() -> Vec<String> {
+    match std::env::var("WCRAFT_AUTH_URL") {
+        Ok(url) => vec![url.trim_end_matches('/').to_owned()],
+        Err(_) => endpoints(),
+    }
+}
+
+fn endpoints() -> Vec<String> {
+    let pack = config::pack();
+    let mut candidates: Vec<String> = Vec::new();
+    if let Some((auth, mirrors)) = published() {
+        candidates.push(auth);
+        candidates.extend(mirrors);
+    }
+    let saved = config::data_dir().join("auth-endpoint.txt");
+    candidates.extend(fs::read_to_string(saved).ok().map(|s| s.trim().to_owned()).filter(|s| s.starts_with("https://")));
+    candidates.push(pack.auth);
+    candidates.extend(pack.mirrors);
+    let mut seen = std::collections::HashSet::new();
+    for candidate in &mut candidates {
+        candidate.truncate(candidate.trim_end_matches('/').len());
+    }
+    candidates.retain(|c| seen.insert(c.clone()));
+    candidates
 }
 
 /// Whether the service answers at `base`.

@@ -32,15 +32,24 @@ export async function refresh() {
   app.playing = app.status.playing
 }
 
+let pingRequest = 0
+
 export async function pingServer() {
+  const request = ++pingRequest
+  let server: ServerStatus
   try {
-    app.server = await api.serverStatus()
+    server = await api.serverStatus()
   } catch {
-    app.server = 'offline'
+    if (request === pingRequest) app.server = 'offline'
     return
   }
+  if (request !== pingRequest) return
+  app.server = server
   // Faces for the players on the server; the old ones stay if the accounts service doesn't answer.
-  if (app.server.players.length) app.players = await api.skinsPlayers().catch(() => app.players)
+  if (server.players.length) {
+    const players = await api.skinsPlayers().catch(() => app.players)
+    if (request === pingRequest) app.players = players
+  }
 }
 
 export async function loadSkins() {

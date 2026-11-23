@@ -35,8 +35,8 @@ pub fn interruptible<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) 
 }
 
 /// One read of a download whose socket has a short read timeout: timeouts only give a chance to
-/// notice a cancel, and a stall of half a minute is an error.
-pub fn read_chunk(reader: &mut impl Read, buf: &mut [u8], last_data: &mut std::time::Instant) -> Result<usize, String> {
+/// notice a cancel. A stall longer than the caller's deadline is an error.
+pub fn read_chunk(reader: &mut impl Read, buf: &mut [u8], last_data: &mut std::time::Instant, stall: Duration) -> Result<usize, String> {
     loop {
         check_cancel()?;
         match reader.read(buf) {
@@ -45,7 +45,7 @@ pub fn read_chunk(reader: &mut impl Read, buf: &mut [u8], last_data: &mut std::t
                 return Ok(n);
             }
             Err(e) if matches!(e.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted) => {
-                if last_data.elapsed() > Duration::from_secs(30) {
+                if last_data.elapsed() > stall {
                     return Err("Загрузка оборвалась".into());
                 }
             }

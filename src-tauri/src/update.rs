@@ -6,7 +6,7 @@
 //! The same folder holds `pack.json` (`scripts/release-pack.sh`): the game version and server to play, signed
 //! the same way, so the game moves to a new version without a new launcher.
 
-use crate::{auth, config};
+use crate::{applog, auth, config, horizon};
 use base64::Engine;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -147,7 +147,7 @@ pub fn install(progress: impl Fn(u64, u64)) -> Result<PathBuf, String> {
         return Err("Обновление слишком большое".into());
     }
     let new = sibling(&target, "new");
-    let result = download(&agent, &release, &new, &progress).and_then(|()| replace(&target, &new));
+    let result = download_client(&release, &new, &progress).and_then(|()| replace(&target, &new));
     if result.is_err() {
         let _ = fs::remove_file(&new);
     }
@@ -160,24 +160,82 @@ pub fn download_client(client: &Release, to: &Path, progress: &impl Fn(u64, u64)
         return Err("Сборка игры слишком большая".into());
     }
     let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(15))
-        .timeout_read(Duration::from_millis(250))
+        .timeout_connect(Duration::from_secs(6))
+        .timeout_read(Duration::from_millis(750))
         .build();
-    let result = download(&agent, client, to, progress);
+    let result = horizon::interruptible(auth::download_endpoints)
+        .and_then(|endpoints| download_from_mirrors(&agent, endpoints, client, to, progress));
     if result.is_err() {
         let _ = fs::remove_file(to);
     }
     result
 }
 
-fn download(agent: &ureq::Agent, release: &Release, to: &Path, progress: &impl Fn(u64, u64)) -> Result<(), String> {
-    let (a, path) = (agent.clone(), format!("/launcher/{}", release.name));
-    let mut reader = crate::horizon::interruptible(move || get(&a, &path))??.into_reader().take(release.size + 1);
+fn download_from_mirrors(
+    agent: &ureq::Agent,
+    mut endpoints: Vec<String>,
+    release: &Release,
+    to: &Path,
+    progress: &impl Fn(u64, u64),
+) -> Result<(), String> {
+    let path = format!("/launcher/{}", release.name);
+    let mut error = "Сервер обновлений недоступен".to_owned();
+    while !endpoints.is_empty() {
+        let index = if endpoints.len() == 1 || release.size == 0 {
+            0
+        } else {
+            let (mirrors, path) = (endpoints.clone(), path.clone());
+            let sample = release.size.min(256 * 1024);
+            horizon::interruptible(move || fastest_mirror(mirrors, &path, sample))?.unwrap_or(0)
+        };
+        let url = format!("{}{}", endpoints.remove(index), path);
+        progress(0, release.size);
+        match download(agent, url, release, to, progress) {
+            Ok(()) => return Ok(()),
+            Err(reason) => {
+                horizon::check_cancel()?;
+                applog::line(&format!("download {} failed: {reason}", release.name));
+                error = reason;
+            }
+        }
+    }
+    Err(error)
+}
+
+fn fastest_mirror(endpoints: Vec<String>, path: &str, sample: u64) -> Option<usize> {
+    let timeout = Duration::from_secs(3);
+    let (tx, rx) = std::sync::mpsc::channel();
+    for (index, endpoint) in endpoints.into_iter().enumerate() {
+        let (tx, url) = (tx.clone(), format!("{endpoint}{path}"));
+        std::thread::spawn(move || {
+            let request = ureq::get(&url).timeout(timeout)
+                .set("Range", &format!("bytes=0-{}", sample - 1));
+            if let Ok(response) = request.call() {
+                let mut prefix = response.into_reader().take(sample);
+                if std::io::copy(&mut prefix, &mut std::io::sink()).ok() == Some(sample) {
+                    let _ = tx.send(index);
+                }
+            }
+        });
+    }
+    drop(tx);
+    rx.recv_timeout(timeout).ok()
+}
+
+fn download(agent: &ureq::Agent, url: String, release: &Release, to: &Path, progress: &impl Fn(u64, u64)) -> Result<(), String> {
+    let agent = agent.clone();
+    let response = horizon::interruptible(move || {
+        agent.get(&url).call().map_err(|error| match error {
+            ureq::Error::Status(code, _) => format!("Сервер загрузок ответил {code}"),
+            ureq::Error::Transport(_) => "Сервер загрузок недоступен".into(),
+        })
+    })??;
+    let mut reader = response.into_reader().take(release.size + 1);
     let mut file = fs::File::create(to).map_err(|e| format!("{}: {e}", to.display()))?;
     let (mut hash, mut done, mut buf) = (Sha256::new(), 0u64, vec![0u8; 1 << 16]);
     let mut last_data = std::time::Instant::now();
     loop {
-        let n = crate::horizon::read_chunk(&mut reader, &mut buf, &mut last_data)?;
+        let n = horizon::read_chunk(&mut reader, &mut buf, &mut last_data, Duration::from_secs(6))?;
         if n == 0 {
             break;
         }
@@ -240,6 +298,63 @@ fn newer(a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retries_a_good_mirror_after_the_fastest_sends_an_incomplete_file() {
+        use std::io::{BufRead, BufReader};
+        use std::net::TcpListener;
+
+        let archive = vec![42; 300 * 1024];
+        let release = Release {
+            name: "mirror-test.zip".into(),
+            sha256: format!("{:x}", Sha256::digest(&archive)),
+            size: archive.len() as u64,
+            mods: Vec::new(),
+        };
+        let mirror = |body: Vec<u8>, probe_delay| {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let endpoint = format!("http://{}", listener.local_addr().unwrap());
+            let worker = std::thread::spawn(move || {
+                for _ in 0..2 {
+                    let (mut socket, _) = listener.accept().unwrap();
+                    socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                    let mut reader = BufReader::new(&socket);
+                    let mut probe = false;
+                    loop {
+                        let mut line = String::new();
+                        if reader.read_line(&mut line).unwrap() == 0 || line == "\r\n" {
+                            break;
+                        }
+                        probe |= line.to_ascii_lowercase().starts_with("range:");
+                    }
+                    if probe {
+                        std::thread::sleep(probe_delay);
+                    }
+                    write!(socket, "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
+                    let _ = socket.write_all(&body);
+                }
+            });
+            (endpoint, worker)
+        };
+        let (good, good_server) = mirror(archive.clone(), Duration::from_millis(200));
+        let (fast, fast_server) = mirror(archive[..256 * 1024].to_vec(), Duration::ZERO);
+        let file = std::env::temp_dir().join(format!("wcraft-mirror-test-{}.zip", std::process::id()));
+        let attempts = std::cell::Cell::new(0);
+        let result = download_from_mirrors(
+            &agent(), vec![good, fast], &release, &file, &|done, _| {
+                if done == 0 {
+                    attempts.set(attempts.get() + 1);
+                }
+            },
+        );
+        let downloaded = fs::read(&file);
+        let _ = fs::remove_file(&file);
+        result.unwrap();
+        assert_eq!(attempts.get(), 2);
+        assert_eq!(downloaded.unwrap(), archive);
+        good_server.join().unwrap();
+        fast_server.join().unwrap();
+    }
 
     #[test]
     fn versions_compare_as_numbers() {

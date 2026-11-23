@@ -66,7 +66,7 @@ pub fn install(emit: &Emit) -> Result<(), String> {
     let mut shown = 0;
     let mut last_data = std::time::Instant::now();
     loop {
-        let n = horizon::read_chunk(&mut reader, &mut buf, &mut last_data)?;
+        let n = horizon::read_chunk(&mut reader, &mut buf, &mut last_data, std::time::Duration::from_secs(30))?;
         if n == 0 {
             break;
         }
