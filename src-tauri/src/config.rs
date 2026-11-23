@@ -6,6 +6,8 @@ use std::{collections::BTreeMap, fs, path::PathBuf};
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Pack {
     pub server: String,
+    pub direct_server: String,
+    pub proxy_server: String,
     pub horizon_version: String,
     pub instance: String,
     /// The accounts service (backend/auth): registration, login, join. Its address when `endpoint` can't say.
@@ -108,8 +110,9 @@ pub fn storage_dir() -> PathBuf {
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct Settings {
-    /// Empty: the pack's server.
+    /// Empty: use the selected route.
     pub server: String,
+    pub connection_route: ConnectionRoute,
     /// stay | minimize | hide
     pub while_playing: String,
     pub game_args: String,
@@ -121,10 +124,20 @@ pub struct Settings {
     pub storage: String,
 }
 
+#[derive(Clone, Copy, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectionRoute {
+    #[default]
+    Pack,
+    Direct,
+    Proxy,
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
             server: String::new(),
+            connection_route: ConnectionRoute::Pack,
             while_playing: "minimize".into(),
             game_args: String::new(),
             accent: "violet".into(),
@@ -149,6 +162,32 @@ impl Settings {
 
     pub fn server(&self) -> String {
         let s = self.server.trim();
-        if s.is_empty() { pack().server } else { s.to_string() }
+        if !s.is_empty() {
+            return s.to_owned();
+        }
+        let pack = pack();
+        match self.connection_route {
+            ConnectionRoute::Pack => pack.server,
+            ConnectionRoute::Direct => pack.direct_server,
+            ConnectionRoute::Proxy => pack.proxy_server,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn connection_route_preserves_existing_settings() {
+        let legacy: Settings = serde_json::from_str(r#"{"server":"  localhost:25565  "}"#).unwrap();
+        assert!(matches!(legacy.connection_route, ConnectionRoute::Pack));
+        assert_eq!(legacy.server(), "localhost:25565");
+
+        let direct: Settings = serde_json::from_str(r#"{"connection_route":"direct"}"#).unwrap();
+        assert_eq!(direct.server(), "31.77.127.75:25565");
+
+        let proxy: Settings = serde_json::from_str(r#"{"connection_route":"proxy"}"#).unwrap();
+        assert_eq!(proxy.server(), "193.84.3.56:25565");
     }
 }

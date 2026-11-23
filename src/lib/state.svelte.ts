@@ -18,7 +18,7 @@ export const app = $state({
   playing: false,
   /** null: not asked yet; 'offline': no answer. */
   server: null as ServerStatus | 'offline' | null,
-  settings: { server: '', while_playing: 'minimize', game_args: '', accent: 'violet', experimental_mods: false, storage: '' } as Settings,
+  settings: { server: '', connection_route: 'pack', while_playing: 'minimize', game_args: '', accent: 'violet', experimental_mods: false, storage: '' } as Settings,
   skins: null as Library | null,
   /** Skins the server's players published, by name. */
   players: {} as Record<string, Skin>,

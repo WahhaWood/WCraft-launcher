@@ -21,6 +21,7 @@ export type Status = {
 export type ServerStatus = { online: number; max: number; version: string; ping_ms: number; players: string[] }
 export type Settings = {
   server: string
+  connection_route: 'pack' | 'direct' | 'proxy'
   while_playing: 'stay' | 'minimize' | 'hide'
   game_args: string
   accent: string

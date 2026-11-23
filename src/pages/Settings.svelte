@@ -10,6 +10,11 @@
     ['minimize', 'Свернуть'],
     ['hide', 'Скрыть'],
   ] as const
+  const routes = [
+    ['pack', 'По умолчанию'],
+    ['proxy', 'Через прокси'],
+    ['direct', 'Напрямую'],
+  ] as const
 
   let size = $state<number | null>(null)
   let confirming = $state(false)
@@ -85,6 +90,27 @@
     </div>
 
     <h2>Игра</h2>
+    <div class="item">
+      <b>Подключение к игре</b>
+      <div class="segment">
+        {#each routes as [id, label]}
+          <button
+            class:on={!app.settings.server.trim() && app.settings.connection_route === id}
+            aria-pressed={!app.settings.server.trim() && app.settings.connection_route === id}
+            onclick={() => {
+              app.settings.connection_route = id
+              app.settings.server = ''
+              void saveSettings()
+            }}
+          >{label}</button>
+        {/each}
+      </div>
+      {#if app.settings.server.trim()}
+        <p>Выбран ручной адрес сервера.</p>
+      {:else}
+        <p>Маршрут первого входа в основной мир.</p>
+      {/if}
+    </div>
     <div class="item">
       <b>Окно лаунчера во время игры</b>
       <p>После выхода из игры окно вернётся само.</p>
@@ -193,8 +219,8 @@
       </div>
       <div class="item">
         <b>Адрес сервера</b>
-        <p>Пусто — сервер WCraft. Меняйте только для проверки.</p>
-        <input class="field" spellcheck="false" placeholder={s?.pack.server ?? ''} bind:value={app.settings.server} onchange={saveSettings} />
+        <p>Ручной адрес переопределяет выбранное подключение.</p>
+        <input class="field" spellcheck="false" placeholder={s?.server ?? ''} bind:value={app.settings.server} onchange={saveSettings} />
       </div>
       <div class="item">
         <b>Аргументы игры</b>
